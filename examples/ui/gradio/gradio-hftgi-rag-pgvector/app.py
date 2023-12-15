@@ -39,19 +39,6 @@ class QueueCallback(BaseCallbackHandler):
     def __init__(self, q):
         self.q = q
 
-    async def on_chain_start(
-        self,
-        serialized,
-        inputs,
-        *,
-        run_id,
-        parent_run_id,
-        tags,
-        metadata,
-        **kwargs,
-    ):
-        print(inputs, serialized, tags, metadata)
-
     def on_llm_new_token(self, token: str, **kwargs: any) -> None:
         self.q.put(token)
 
@@ -80,7 +67,7 @@ def stream(input_text) -> Generator:
     # Create a function to call - this will run in a thread
     def task():
         resp = qa_chain({"question": input_text})
-        sources = remove_source_duplicates(resp['source_documents'])
+        sources = remove_source_duplicates(resp.get('source_documents', []))
         if len(sources) != 0:
             q.put("\n*Sources:* \n")
             for source in sources:
@@ -152,7 +139,6 @@ If a question does not make any sense, or is not factually coherent, explain why
 """
 
 
-
 QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
 
 from langchain.memory import ConversationBufferMemory
@@ -163,16 +149,34 @@ memory = ConversationBufferMemory(memory_key='chat_history', return_messages=Tru
 def get_chat_history(h):
     return h
 
+condense_question_llm = HuggingFaceTextGenInference(
+    inference_server_url=INFERENCE_SERVER_URL,
+    max_new_tokens=MAX_NEW_TOKENS,
+    top_k=TOP_K,
+    top_p=TOP_P,
+    typical_p=TYPICAL_P,
+    temperature=TEMPERATURE,
+    repetition_penalty=REPETITION_PENALTY,
+    streaming=False,
+    verbose=False,
+)
 
-first_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question. Preserve the original question in the answer during rephrasing.
 
-Chat History:
+
+condense_template = """\
+Given a conversation (between Human and Assistant) and a follow up message from Human, \
+rewrite the message to be a standalone question that captures all relevant context \
+from the conversation.
+
+<Chat History>
 {chat_history}
-Follow Up Input: {question}
-Standalone question:"""
-CONDENSE_QUESTION_PROMPT_CUSTOM = PromptTemplate.from_template(first_template)
 
+<Follow Up Message>
+{question}
 
+<Standalone question>
+"""
+CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_template)
 
 qa_chain = ConversationalRetrievalChain.from_llm(
     llm,
@@ -184,10 +188,9 @@ qa_chain = ConversationalRetrievalChain.from_llm(
     verbose=True,
     get_chat_history=get_chat_history,
     combine_docs_chain_kwargs={"prompt": QA_CHAIN_PROMPT},
-    condense_question_prompt=CONDENSE_QUESTION_PROMPT_CUSTOM,
-    return_source_documents=True,
-    return_generated_question=False,
-    rephrase_question=False
+    condense_question_llm=condense_question_llm,
+    condense_question_prompt=CONDENSE_QUESTION_PROMPT,
+    return_source_documents=True
 )
 
 
