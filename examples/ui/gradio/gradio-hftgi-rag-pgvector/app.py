@@ -9,7 +9,7 @@ from typing import Optional
 import gradio as gr
 from dotenv import load_dotenv
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain.chains import RetrievalQA
+from langchain.chains import RetrievalQA, ConversationalRetrievalChain
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain.llms import HuggingFaceTextGenInference
 from langchain.prompts import PromptTemplate
@@ -39,6 +39,19 @@ class QueueCallback(BaseCallbackHandler):
     def __init__(self, q):
         self.q = q
 
+    async def on_chain_start(
+        self,
+        serialized,
+        inputs,
+        *,
+        run_id,
+        parent_run_id,
+        tags,
+        metadata,
+        **kwargs,
+    ):
+        print(inputs, serialized, tags, metadata)
+
     def on_llm_new_token(self, token: str, **kwargs: any) -> None:
         self.q.put(token)
 
@@ -46,7 +59,6 @@ class QueueCallback(BaseCallbackHandler):
         return self.q.empty()
 
 def remove_source_duplicates(input_list):
-    from pprint import pprint
     unique_list = []
     for item in input_list:
         metadata_as_str = metadata_to_string(item.metadata)
@@ -67,7 +79,7 @@ def stream(input_text) -> Generator:
 
     # Create a function to call - this will run in a thread
     def task():
-        resp = qa_chain({"query": input_text})
+        resp = qa_chain({"question": input_text})
         sources = remove_source_duplicates(resp['source_documents'])
         if len(sources) != 0:
             q.put("\n*Sources:* \n")
@@ -124,25 +136,72 @@ llm = HuggingFaceTextGenInference(
 # Prompt
 template="""<s>[INST] <<SYS>>
 You are a helpful, respectful and honest assistant named RedHatTrainingBot answering questions about the Red Hat products and technologies ecosystem.
-You will be given a question you need to answer, and a context to provide you with information. You must answer the question based as much as possible on this context.
+You will be given a question you need to answer, a context to provide you with information, and the chat history. You must answer the question based as much as possible on this context.
 Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
 
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information.
 <</SYS>>
 
-Question: {question}
-Context: {context} [/INST]
+<<Context>>
+{context}
+<</Context>>
+
+<<Question>>
+{question}
+<</Question>> [/INST]
 """
+
+
+
 QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
 
-qa_chain = RetrievalQA.from_chain_type(
+from langchain.memory import ConversationBufferMemory
+
+memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
+
+
+def get_chat_history(h):
+    return h
+
+
+first_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question. Preserve the original question in the answer during rephrasing.
+
+Chat History:
+{chat_history}
+Follow Up Input: {question}
+Standalone question:"""
+CONDENSE_QUESTION_PROMPT_CUSTOM = PromptTemplate.from_template(first_template)
+
+
+
+qa_chain = ConversationalRetrievalChain.from_llm(
     llm,
     retriever=store.as_retriever(
         search_type="similarity_score_threshold",
-        search_kwargs={"k": 4, "score_threshold": 0.2 }),
-        chain_type_kwargs={"prompt": QA_CHAIN_PROMPT},
-        return_source_documents=True
-    )
+        search_kwargs={"k": 4, "score_threshold": 0.2 }
+    ),
+    memory=memory,
+    verbose=True,
+    get_chat_history=get_chat_history,
+    combine_docs_chain_kwargs={"prompt": QA_CHAIN_PROMPT},
+    condense_question_prompt=CONDENSE_QUESTION_PROMPT_CUSTOM,
+    return_source_documents=True,
+    return_generated_question=False,
+    rephrase_question=False
+)
+
+
+
+
+
+# qa_chain = RetrievalQA.from_chain_type(
+#     llm,
+#     retriever=store.as_retriever(
+#         search_type="similarity_score_threshold",
+#         search_kwargs={"k": 4, "score_threshold": 0.2 }),
+#         chain_type_kwargs={"prompt": QA_CHAIN_PROMPT},
+#         return_source_documents=True
+#     )
 
 # Gradio implementation
 def ask_llm(message, history):
@@ -159,7 +218,7 @@ with gr.Blocks(title="RedHatTrainingBot", css="footer {visibility: hidden}") as 
     gr.ChatInterface(
         ask_llm,
         chatbot=chatbot,
-        clear_btn=None,
+        #clear_btn=True,
         retry_btn=None,
         undo_btn=None,
         stop_btn=None,
