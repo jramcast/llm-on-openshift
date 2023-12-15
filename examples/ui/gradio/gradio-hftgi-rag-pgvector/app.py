@@ -1,15 +1,14 @@
 import os
-import random
-import time
 from collections.abc import Generator
 from queue import Empty, Queue
 from threading import Thread
-from typing import Optional
 
 import gradio as gr
 from dotenv import load_dotenv
+from langchain.memory import ConversationBufferMemory
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain.chains import RetrievalQA, ConversationalRetrievalChain
+from langchain.chains import ConversationalRetrievalChain
+from langchain.chains.question_answering import load_qa_chain
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain.llms import HuggingFaceTextGenInference
 from langchain.prompts import PromptTemplate
@@ -120,6 +119,20 @@ llm = HuggingFaceTextGenInference(
     callbacks=[QueueCallback(q)]
 )
 
+# Memory
+memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
+
+def get_chat_history(history):
+    messages = []
+    for msj in history:
+
+        if msj.type == "human":
+            messages.append(f"<s>[INST] {msj.content} [/INST]")
+        else:
+            messages.append(f"{msj.content}</s>")
+
+    return "\n".join(messages)
+
 # Prompt
 template="""<s>[INST] <<SYS>>
 You are a helpful, respectful and honest assistant named RedHatTrainingBot answering questions about the Red Hat products and technologies ecosystem.
@@ -127,27 +140,49 @@ You will be given a question you need to answer, a context to provide you with i
 Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
 
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information.
+
+This is your CONTEXT for answer the last question:
+{context}
 <</SYS>>
 
-<<Context>>
-{context}
-<</Context>>
-
-<<Question>>
+Who are you?
+[/INST]
+I am RedHatTrainingBot, a helpful, respectful and honest assistant that can ask technical questions about the Red Hat products and technologies ecosystem.
+</s>
+{chat_history}
+<s>
+[INST]
 {question}
-<</Question>> [/INST]
+[/INST]
 """
-
 
 QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
 
-from langchain.memory import ConversationBufferMemory
-
-memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
-
-
-def get_chat_history(h):
-    return h
+condense_template = """\
+<s>[INST] You must echo the user input. Repeat the user input and do not change a single character of the message.
+Do not add any additional characters. Just echo the user message as is.
+For example, if write "Hello, good Morning?", then you must anwser "Hello, good Morning?".
+[/INST]
+Understood, I will echo every single message.
+</s>
+<s>
+[INST]
+how are you?
+[/INST]
+how are you?
+</s>
+<s>
+[INST]
+what is a service?
+[/INST]
+what is a service?
+</s>
+<s>
+[INST]
+{question}
+[/INST]
+"""
+CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_template)
 
 condense_question_llm = HuggingFaceTextGenInference(
     inference_server_url=INFERENCE_SERVER_URL,
@@ -160,23 +195,6 @@ condense_question_llm = HuggingFaceTextGenInference(
     streaming=False,
     verbose=False,
 )
-
-
-
-condense_template = """\
-Given a conversation (between Human and Assistant) and a follow up message from Human, \
-rewrite the message to be a standalone question that captures all relevant context \
-from the conversation.
-
-<Chat History>
-{chat_history}
-
-<Follow Up Message>
-{question}
-
-<Standalone question>
-"""
-CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_template)
 
 qa_chain = ConversationalRetrievalChain.from_llm(
     llm,
@@ -192,19 +210,6 @@ qa_chain = ConversationalRetrievalChain.from_llm(
     condense_question_prompt=CONDENSE_QUESTION_PROMPT,
     return_source_documents=True
 )
-
-
-
-
-
-# qa_chain = RetrievalQA.from_chain_type(
-#     llm,
-#     retriever=store.as_retriever(
-#         search_type="similarity_score_threshold",
-#         search_kwargs={"k": 4, "score_threshold": 0.2 }),
-#         chain_type_kwargs={"prompt": QA_CHAIN_PROMPT},
-#         return_source_documents=True
-#     )
 
 # Gradio implementation
 def ask_llm(message, history):
