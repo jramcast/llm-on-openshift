@@ -136,18 +136,19 @@ def get_chat_history(history):
 # Prompt
 template="""<s>[INST] <<SYS>>
 You are a helpful, respectful and honest assistant named RedHatTrainingBot answering questions about the Red Hat products and technologies ecosystem.
-You will be given a question you need to answer, a context to provide you with information, and the chat history. You must answer the question based as much as possible on this context.
-Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
+You will be given a context to provide you with information and the conversation history. The last question is the question you need to answer. You must answer this last question based as much as possible on the provided context.
 
+Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information.
 
-This is your CONTEXT for answer the last question:
+<<CONTEXT>>
 {context}
+<</CONTEXT>>
 <</SYS>>
 
 Who are you?
 [/INST]
-I am RedHatTrainingBot, a helpful, respectful and honest assistant that can ask technical questions about the Red Hat products and technologies ecosystem.
+I am RedHatTrainingBot, an assistant that can answer technical questions about the Red Hat products and technologies ecosystem.
 </s>
 {chat_history}
 <s>
@@ -158,31 +159,16 @@ I am RedHatTrainingBot, a helpful, respectful and honest assistant that can ask 
 
 QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
 
-condense_template = """\
-<s>[INST] You must echo the user input. Repeat the user input and do not change a single character of the message.
-Do not add any additional characters. Just echo the user message as is.
-For example, if write "Hello, good Morning?", then you must anwser "Hello, good Morning?".
-[/INST]
-Understood, I will echo every single message.
-</s>
+_template = """<s>[INST] <<SYS>>Given the following conversation and a follow up input, rephrase the follow up input to be a standalone question, in its original language.<</SYS>> [/INST]
+
+Chat History:
+{chat_history}
 <s>
 [INST]
-how are you?
-[/INST]
-how are you?
-</s>
-<s>
-[INST]
-what is a service?
-[/INST]
-what is a service?
-</s>
-<s>
-[INST]
+Based on the preceding chat history, rephrase this follow up input to be a standalone question: 
 {question}
-[/INST]
-"""
-CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_template)
+Standalone question: [/INST]"""
+CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(_template)
 
 condense_question_llm = HuggingFaceTextGenInference(
     inference_server_url=INFERENCE_SERVER_URL,
@@ -208,6 +194,7 @@ qa_chain = ConversationalRetrievalChain.from_llm(
     combine_docs_chain_kwargs={"prompt": QA_CHAIN_PROMPT},
     condense_question_llm=condense_question_llm,
     condense_question_prompt=CONDENSE_QUESTION_PROMPT,
+    rephrase_question=False,
     return_source_documents=True
 )
 
