@@ -70,7 +70,7 @@ def metadata_to_string(metadata):
 
         file = metadata.get("file", "").replace("/opt/app-root/src/courses/", "")
 
-        url = "https://github.com/RedHatTraining/" + file.replace(sku, f"{sku}/tree/main/")
+        url = "https://github.com/RedHatTraining/" + file.replace(sku, f"{sku}/tree/main")
 
         if file:
             reference += f" - [`{file}`]({url})"
