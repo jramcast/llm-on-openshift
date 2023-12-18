@@ -53,6 +53,30 @@ def remove_source_duplicates(input_list):
     return unique_list
 
 def metadata_to_string(metadata):
+    if "sku" in metadata:
+        sku = metadata.get("sku", "")
+        section = metadata.get("section")
+        subsection = metadata.get("subsection")
+
+        reference = f"**{sku}**: "
+
+        section_names = []
+        if section:
+            section_names.append(section)
+        if subsection:
+            section_names.append(subsection)
+
+        reference += ", ".join(section_names)
+
+        file = metadata.get("file", "").replace("/opt/app-root/src/courses/", "")
+
+        url = "https://github.com/RedHatTraining/" + file.replace(sku, f"{sku}/tree/main/")
+
+        if file:
+            reference += f" - [`{file}`]({url})"
+
+        return reference
+
     source = metadata.get("source", "")
     source = source.replace("pdf/", "")
     # Start counting pages at 1, not 0. If no page is given, then display 0
@@ -68,7 +92,7 @@ def stream(input_text) -> Generator:
         resp = qa_chain({"question": input_text})
         sources = remove_source_duplicates(resp.get('source_documents', []))
         if len(sources) != 0:
-            q.put("\n*Sources:* \n")
+            q.put("\n\n*Sources:* \n")
             for source in sources:
                 q.put("* " + str(source) + "\n")
         q.put(job_done)
@@ -139,7 +163,7 @@ def get_chat_history(history):
 # Prompt
 template="""<s>[INST] <<SYS>>
 You are a helpful, respectful and honest assistant named RedHatTrainingBot answering questions about the Red Hat products and technologies ecosystem.
-You will be given a context to provide you with information and the conversation history. The last question is the question you need to answer. You must answer this last question based as much as possible on the provided context.
+You will be given a context to provide you with information and the conversation history. The last question is the question you need to answer. You must answer this last question based as much as possible on the provided context. Note that the context is written in AsciiDoc format.
 
 Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information.
