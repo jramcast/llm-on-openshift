@@ -122,6 +122,9 @@ llm = HuggingFaceTextGenInference(
 # Memory
 memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
 
+def clear_memory():
+    memory.clear()
+
 def get_chat_history(history):
     messages = []
     for msj in history:
@@ -210,14 +213,17 @@ with gr.Blocks(title="RedHatTrainingBot", css="footer {visibility: hidden}") as 
         render=False,
         show_copy_button=True,
     )
-    gr.ChatInterface(
+    interface = gr.ChatInterface(
         ask_llm,
         chatbot=chatbot,
-        #clear_btn=True,
         retry_btn=None,
         undo_btn=None,
         stop_btn=None,
         description=APP_TITLE
+    )
+
+    interface.clear_btn.click(
+        clear_memory
     )
 
 if __name__ == "__main__":
