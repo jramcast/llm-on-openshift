@@ -30,7 +30,7 @@ spec:
               memory: 1Gi
           readinessProbe:
             httpGet:
-              path: /queue/status
+              path: /app_id
               port: http
               scheme: HTTP
             timeoutSeconds: 5
@@ -41,7 +41,7 @@ spec:
           name: server
           livenessProbe:
             httpGet:
-              path: /queue/status
+              path: /app_id
               port: http
               scheme: HTTP
             timeoutSeconds: 8
@@ -50,13 +50,13 @@ spec:
             failureThreshold: 3
           env:
             - name: APP_TITLE
-              value: 'Talk with your documentation'
+              value: Talk with Red Hat Training
             - name: INFERENCE_SERVER_URL
-              value: 'https://your_inference_endpoint'
+              value: 'http://hf-text-generation-inference-server:3000/'
             - name: DB_CONNECTION_STRING
-              value: 'postgresql+psycopg://user:password@postgresql-server:5432/vectordb'
+              value: 'postgresql+psycopg://vectordb:vectordb@postgresql:5432/vectordb'
             - name: DB_COLLECTION_NAME
-              values: 'documents_test'
+              value: documents_test
             - name: MAX_NEW_TOKENS
               value: '512'
             - name: TOP_K
@@ -84,7 +84,7 @@ spec:
           imagePullPolicy: IfNotPresent
           startupProbe:
             httpGet:
-              path: /queue/status
+              path: /app_id
               port: http
               scheme: HTTP
             timeoutSeconds: 1
@@ -92,7 +92,10 @@ spec:
             successThreshold: 1
             failureThreshold: 24
           terminationMessagePolicy: File
-          image: 'quay.io/rh-aiservices-bu/gradio-hftgi-rag-pgvector:latest'
+          envFrom:
+            - secretRef:
+                name: gradio-auth
+          image: 'quay.io/jramcast/gradio-hftgi-rag-pgvector:1.0.3'
       dnsPolicy: ClusterFirst
   strategy:
     type: RollingUpdate
