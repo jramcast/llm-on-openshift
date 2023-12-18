@@ -235,6 +235,7 @@ with gr.Blocks(title="RedHatTrainingBot", css="footer {visibility: hidden}") as 
         show_label=False,
         avatar_images=(None,'assets/robot-head.svg'),
         render=False,
+        height=600,
         show_copy_button=True,
     )
     interface = gr.ChatInterface(

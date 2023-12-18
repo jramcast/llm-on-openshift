@@ -95,7 +95,7 @@ spec:
           envFrom:
             - secretRef:
                 name: gradio-auth
-          image: 'quay.io/jramcast/gradio-hftgi-rag-pgvector:1.0.4'
+          image: 'quay.io/jramcast/gradio-hftgi-rag-pgvector:1.0.6'
       dnsPolicy: ClusterFirst
   strategy:
     type: RollingUpdate
