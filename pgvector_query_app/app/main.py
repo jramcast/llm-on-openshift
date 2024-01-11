@@ -21,7 +21,7 @@ embeddings = HuggingFaceEmbeddings()
 @app.get("/find")
 def find(q: str, min_score=0.5):
     store = connect_to_db()
-    results = store.similarity_search_with_relevance_scores(q, k=3, score_threshold=min_score)
+    results = store.similarity_search_with_relevance_scores(q, k=3, score_threshold=float(min_score))
     return results
 
 
