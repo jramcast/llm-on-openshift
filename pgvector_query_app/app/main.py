@@ -1,7 +1,10 @@
 import os
 from fastapi import FastAPI
+from dotenv import load_dotenv
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain.vectorstores.pgvector import PGVector
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -12,17 +15,18 @@ if not CONNECTION_STRING or not COLLECTION_NAME:
     raise RuntimeError("Specify CONNECTION_STRING and COLLECTION NAME env variables")
 
 
+embeddings = HuggingFaceEmbeddings()
+
+
 @app.get("/find")
-def find(q: str):
+def find(q: str, min_score=0.5):
     store = connect_to_db()
-    results = store.similarity_search(q, k=3, return_metadata=True)
+    results = store.similarity_search_with_relevance_scores(q, k=3, score_threshold=min_score)
     return results
 
 
 def connect_to_db():
-    embeddings = HuggingFaceEmbeddings()
     return PGVector(
         connection_string=CONNECTION_STRING,
         collection_name=COLLECTION_NAME,
         embedding_function=embeddings)
-
