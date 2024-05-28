@@ -8,30 +8,30 @@ from dotenv import load_dotenv
 from langchain.memory import ConversationBufferMemory
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.chains import ConversationalRetrievalChain
-from langchain.chains.question_answering import load_qa_chain
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
-from langchain.llms import HuggingFaceTextGenInference
 from langchain.prompts import PromptTemplate
 from langchain.vectorstores.pgvector import PGVector
+from langchain_community.llms import VLLMOpenAI
 
 load_dotenv()
 
 # Parameters
 
-APP_TITLE = os.getenv('APP_TITLE', 'Talk with Red Hat Training')
+APP_TITLE = os.getenv("APP_TITLE", "Talk with Red Hat Training")
 
-INFERENCE_SERVER_URL = os.getenv('INFERENCE_SERVER_URL')
-MAX_NEW_TOKENS = int(os.getenv('MAX_NEW_TOKENS', 512))
-TOP_K = int(os.getenv('TOP_K', 10))
-TOP_P = float(os.getenv('TOP_P', 0.95))
-TYPICAL_P = float(os.getenv('TYPICAL_P', 0.95))
-TEMPERATURE = float(os.getenv('TEMPERATURE', 0.01))
-REPETITION_PENALTY = float(os.getenv('REPETITION_PENALTY', 1.03))
+INFERENCE_SERVER_URL = os.getenv("INFERENCE_SERVER_URL")
+MODEL_NAME = os.getenv("MODEL_NAME")
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", 512))
+TOP_K = int(os.getenv("TOP_K", 10))
+TOP_P = float(os.getenv("TOP_P", 0.95))
+TYPICAL_P = float(os.getenv("TYPICAL_P", 0.95))
+TEMPERATURE = float(os.getenv("TEMPERATURE", 0.01))
+PRESENCE_PENALTY = float(os.getenv("PRESENCE_PENALTY", 1.03))
 
-DB_CONNECTION_STRING = os.getenv('DB_CONNECTION_STRING')
-DB_COLLECTION_NAME = os.getenv('DB_COLLECTION_NAME')
+DB_CONNECTION_STRING = os.getenv("DB_CONNECTION_STRING")
+DB_COLLECTION_NAME = os.getenv("DB_COLLECTION_NAME")
 
-# Streaming implementation
+
 class QueueCallback(BaseCallbackHandler):
     """Callback handler for streaming LLM responses to a queue."""
 
@@ -44,6 +44,7 @@ class QueueCallback(BaseCallbackHandler):
     def on_llm_end(self, *args, **kwargs: any) -> None:
         return self.q.empty()
 
+
 def remove_source_duplicates(input_list):
     unique_list = []
     for item in input_list:
@@ -51,6 +52,7 @@ def remove_source_duplicates(input_list):
         if metadata_as_str not in unique_list:
             unique_list.append(metadata_as_str)
     return unique_list
+
 
 def metadata_to_string(metadata):
     if "sku" in metadata:
@@ -70,7 +72,9 @@ def metadata_to_string(metadata):
 
         file = metadata.get("file", "").replace("/opt/app-root/src/courses/", "")
 
-        url = "https://github.com/RedHatTraining/" + file.replace(sku, f"{sku}/tree/main")
+        url = "https://github.com/RedHatTraining/" + file.replace(
+            sku, f"{sku}/tree/main"
+        )
 
         if file:
             reference += f" - [`{file}`]({url})"
@@ -83,6 +87,7 @@ def metadata_to_string(metadata):
     page = metadata.get("page", -1) + 1
     return f"{source}, page {page}"
 
+
 def stream(input_text) -> Generator:
     # Create a Queue
     job_done = object()
@@ -90,7 +95,7 @@ def stream(input_text) -> Generator:
     # Create a function to call - this will run in a thread
     def task():
         resp = qa_chain({"question": input_text})
-        sources = remove_source_duplicates(resp.get('source_documents', []))
+        sources = remove_source_duplicates(resp.get("source_documents", []))
         if len(sources) != 0:
             q.put("\n\n*Sources:* \n")
             for source in sources:
@@ -115,6 +120,7 @@ def stream(input_text) -> Generator:
         except Empty:
             continue
 
+
 # A Queue is needed for Streaming implementation
 q = Queue()
 
@@ -127,27 +133,33 @@ embeddings = HuggingFaceEmbeddings()
 store = PGVector(
     connection_string=DB_CONNECTION_STRING,
     collection_name=DB_COLLECTION_NAME,
-    embedding_function=embeddings)
-
-# LLM
-llm = HuggingFaceTextGenInference(
-    inference_server_url=INFERENCE_SERVER_URL,
-    max_new_tokens=MAX_NEW_TOKENS,
-    top_k=TOP_K,
-    top_p=TOP_P,
-    typical_p=TYPICAL_P,
-    temperature=TEMPERATURE,
-    repetition_penalty=REPETITION_PENALTY,
-    streaming=True,
-    verbose=False,
-    callbacks=[QueueCallback(q)]
+    embedding_function=embeddings,
 )
 
+# LLM
+llm = VLLMOpenAI(
+    openai_api_key="EMPTY",
+    openai_api_base=INFERENCE_SERVER_URL,
+    model_name=MODEL_NAME,
+    max_tokens=MAX_TOKENS,
+    top_p=TOP_P,
+    temperature=TEMPERATURE,
+    presence_penalty=PRESENCE_PENALTY,
+    streaming=True,
+    verbose=False,
+    callbacks=[QueueCallback(q)],
+)
+
+
 # Memory
-memory = ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer')
+memory = ConversationBufferMemory(
+    memory_key="chat_history", return_messages=True, output_key="answer"
+)
+
 
 def clear_memory():
     memory.clear()
+
 
 def get_chat_history(history):
     messages = []
@@ -160,8 +172,9 @@ def get_chat_history(history):
 
     return "\n".join(messages)
 
+
 # Prompt
-template="""<s>[INST] <<SYS>>
+template = """<s>[INST]
 You are a helpful, respectful and honest assistant named RedHatTrainingBot answering questions about the Red Hat products and technologies ecosystem.
 You will be given a context to provide you with information and the conversation history. The last question is the question you need to answer. You must answer this last question based as much as possible on the provided context. Note that the context is written in AsciiDoc format.
 
@@ -173,13 +186,6 @@ If you don't know the answer to a question, please don't share false information
 <<CONTEXT>>
 {context}
 <</CONTEXT>>
-<</SYS>>
-
-Hi. Before we start chatting, I want to mention a very important aspect that I want you to follow strictly: Restrict your answers to the Red Hat products and technologies ecosystem.
-You are not allowed to answer questions outside of the scope of Red Hat products and technologies ecosystem, and their related technologies.
-If the following CONTEXT area is empty or contains only blank spaces, NEVER EVER answer the question, NEVER!
-Instead, just say that you do not know the answer to that question and remind me that you can only answer questions related to Red Hat technologies and their ecosystem.
-
 [/INST]
 Understood.
 </s>
@@ -198,19 +204,19 @@ Chat History:
 {chat_history}
 <s>
 [INST]
-Based on the preceding chat history, rephrase this follow up input to be a standalone question: 
+Based on the preceding chat history, rephrase this follow up input to be a standalone question:
 {question}
 Standalone question: [/INST]"""
 CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(_template)
 
-condense_question_llm = HuggingFaceTextGenInference(
-    inference_server_url=INFERENCE_SERVER_URL,
-    max_new_tokens=MAX_NEW_TOKENS,
-    top_k=TOP_K,
+condense_question_llm = VLLMOpenAI(
+    openai_api_key="EMPTY",
+    openai_api_base=INFERENCE_SERVER_URL,
+    model_name=MODEL_NAME,
+    max_tokens=MAX_TOKENS,
     top_p=TOP_P,
-    typical_p=TYPICAL_P,
     temperature=TEMPERATURE,
-    repetition_penalty=REPETITION_PENALTY,
+    presence_penalty=PRESENCE_PENALTY,
     streaming=False,
     verbose=False,
 )
@@ -219,7 +225,7 @@ qa_chain = ConversationalRetrievalChain.from_llm(
     llm,
     retriever=store.as_retriever(
         search_type="similarity_score_threshold",
-        search_kwargs={"k": 5, "score_threshold": 0.5}
+        search_kwargs={"k": 5, "score_threshold": 0.5},
     ),
     memory=memory,
     verbose=True,
@@ -228,18 +234,20 @@ qa_chain = ConversationalRetrievalChain.from_llm(
     condense_question_llm=condense_question_llm,
     condense_question_prompt=CONDENSE_QUESTION_PROMPT,
     rephrase_question=False,
-    return_source_documents=True
+    return_source_documents=True,
 )
+
 
 # Gradio implementation
 def ask_llm(message, history):
     for next_token, content in stream(message):
-        yield(content)
+        yield (content)
+
 
 with gr.Blocks(title="RedHatTrainingBot", css="footer {visibility: hidden}") as demo:
     chatbot = gr.Chatbot(
         show_label=False,
-        avatar_images=(None,'assets/robot-head.svg'),
+        avatar_images=(None, "assets/robot-head.svg"),
         render=False,
         height=600,
         show_copy_button=True,
@@ -250,12 +258,10 @@ with gr.Blocks(title="RedHatTrainingBot", css="footer {visibility: hidden}") as 
         retry_btn=None,
         undo_btn=None,
         stop_btn=None,
-        description=APP_TITLE
+        description=APP_TITLE,
     )
 
-    interface.clear_btn.click(
-        clear_memory
-    )
+    interface.clear_btn.click(clear_memory)
 
 if __name__ == "__main__":
 
@@ -268,8 +274,8 @@ if __name__ == "__main__":
         auth = None
 
     demo.queue().launch(
-        server_name='0.0.0.0',
+        server_name="0.0.0.0",
         share=False,
-        favicon_path='./assets/robot-head.ico',
-        auth=auth
+        favicon_path="./assets/robot-head.ico",
+        auth=auth,
     )

@@ -1,0 +1,4 @@
+[flake8]
+# Match "Black" line length:
+# https://black.readthedocs.io/en/stable/the_black_code_style/current_style.html#line-length
+max-line-length = 88
