@@ -166,17 +166,17 @@ def get_chat_history(history):
     for msj in history:
 
         if msj.type == "human":
-            messages.append(f"<s>[INST] {msj.content} [/INST]")
+            messages.append(f"Human: {msj.content}")
         else:
-            messages.append(f"{msj.content}</s>")
+            messages.append(f"AI: {msj.content}")
 
     return "\n".join(messages)
 
 
 # Prompt
-template = """<s>[INST]
+template = """[INST]
 You are a helpful, respectful and honest assistant named RedHatTrainingBot answering questions about the Red Hat products and technologies ecosystem.
-You will be given a context to provide you with information and the conversation history. The last question is the question you need to answer. You must answer this last question based as much as possible on the provided context. Note that the context is written in AsciiDoc format.
+You will be given a context to provide you with information and the conversation history. You must answer the question based as much as possible on the provided context. Note that the context is written in AsciiDoc format.
 
 Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct.
@@ -186,24 +186,23 @@ If you don't know the answer to a question, please don't share false information
 <<CONTEXT>>
 {context}
 <</CONTEXT>>
-[/INST]
-Understood.
-</s>
+
+<<CONVERSTATION_HISTORY>>
 {chat_history}
-<s>
-[INST]
+<</CONVERSTATION_HISTORY>>
+
+Now, with the context and the conversation history, answer this question:
 {question}
 [/INST]
 """
 
 QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
 
-_template = """<s>[INST] <<SYS>>Given the following conversation and a follow up input, rephrase the follow up input to be a standalone question, in its original language.<</SYS>> [/INST]
+_template = """[INST] Given the following chat history and a follow up input, rephrase the follow up input to be a standalone question, in its original language.
 
 Chat History:
 {chat_history}
-<s>
-[INST]
+
 Based on the preceding chat history, rephrase this follow up input to be a standalone question:
 {question}
 Standalone question: [/INST]"""

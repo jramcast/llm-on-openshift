@@ -52,12 +52,14 @@ spec:
             - name: APP_TITLE
               value: Talk with Red Hat Training
             - name: INFERENCE_SERVER_URL
-              value: 'http://hf-text-generation-inference-server:3000/'
+              value: 'http://vllm.llm-hosting.svc.cluster.local:8000/v1'
             - name: DB_CONNECTION_STRING
               value: 'postgresql+psycopg://vectordb:vectordb@postgresql:5432/vectordb'
             - name: DB_COLLECTION_NAME
               value: courses_adoc
-            - name: MAX_NEW_TOKENS
+            - name: MODEL_NAME
+              value: 'mistralai/Mistral-7B-Instruct-v0.2'
+            - name: MAX_TOKENS
               value: '512'
             - name: TOP_K
               value: '10'
@@ -67,7 +69,7 @@ spec:
               value: '0.95'
             - name: TEMPERATURE
               value: '0.01'
-            - name: REPETITION_PENALTY
+            - name: PRESENCE_PENALTY
               value: '1.03'
           securityContext:
             capabilities:
@@ -95,7 +97,7 @@ spec:
           envFrom:
             - secretRef:
                 name: gradio-auth
-          image: 'quay.io/jramcast/gradio-hftgi-rag-pgvector:1.0.7'
+          image: 'quay.io/jramcast/gradio-hftgi-rag-pgvector:2.0.0'
       dnsPolicy: ClusterFirst
   strategy:
     type: RollingUpdate
